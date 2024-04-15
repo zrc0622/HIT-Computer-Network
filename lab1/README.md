@@ -1,6 +1,10 @@
 # 基础知识
 1. char和TCHAR：TCHAR在Unicode模式下，是wchar_t\*类型的数组；在ANSI模式下，是char\*类型的数组
 2. _tmain是VS的C++程序的入口点
+3. 对于GET请求
+   1. 200 OK：表示请求已成功，服务器已返回请求的资源。
+   2. 304 Not Modified：表示自从上次请求之后，请求的资源未被修改，因此客户端可以继续使用其已有的版本。
+   3. 404 Not Found：表示服务器无法找到请求的资源。通常，这意味着资源可能已被删除或不可用，或者URL输入错误。
 
 # 代码解读
 1. `InitSocket()`函数
@@ -28,3 +32,33 @@
 
 # 其它问题
 1. 所有操作系统都有127.0.0.1这个IP地址，即localhost地址
+
+# 暂存
+## 目标服务器返回的数据(未添加缓存功能)
+```
+HTTP/1.1 200 
+Server: Server
+Date: Mon, 15 Apr 2024 13:12:14 GMT
+Content-Type: text/plain;charset=ISO-8859-1
+Content-Length: 1
+Connection: keep-alive
+Set-Cookie: name=value; HttpOnly
+Pragma: no-cache
+Expires: Thu, 01 Jan 1970 00:00:00 GMT
+Cache-Control: no-cache
+Cache-Control: no-store
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods: GET, POST, OPTIONS, PUT, DELETE
+Access-Control-Allow-Headers: DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type
+
+1SSIONID=EE0B84167CABB062F5BD36BEA1BEC902
+```
+实际就是HTTP响应消息的头部
+
+## 目标服务器返回的数据(添加缓存功能)
+已缓存
+```
+```
+未缓存
+```
+```

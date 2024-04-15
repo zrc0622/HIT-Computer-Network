@@ -4,6 +4,8 @@
 #include <Windows.h>
 #include <process.h>
 #include <string.h>
+#include <string>
+#include <iostream>
 #pragma comment(lib, "Ws2_32.lib")
 #define MAXSIZE 65507 // 发送数据报文的最大长度
 #define HTTP_PORT 80  // http 服务器端口
@@ -26,11 +28,17 @@ BOOL InitSocket();
 void ParseHttpHead(char *buffer, HttpHeader *httpHeader);
 BOOL ConnectToServer(SOCKET *serverSocket, char *host);
 unsigned int __stdcall ProxyThread(LPVOID lpParameter);
+void makeCachename(char* url, char* filename);
+void getCachedate(FILE* in, char* date);
+void addDate(char* buffer, char* date);
+boolean useCache(char* buffer, char* cachename);
+void makeCache(char* buffer, char* url);
 
 /*代理服务器全局变量*/
 SOCKET ProxyServer; // 代理套接字描述符：用于接收来自客户端的连接
 sockaddr_in ProxyServerAddr;    // 代理端点地址
 const int ProxyPort = 8080;    // 代理端口
+std::string cacheDir = "./cache/";
 // 由于新的连接都使用新线程进行处理，对线程的频繁的创建和销毁特别浪费资源
 // 可以使用线程池技术提高服务器效率
 // const int ProxyThreadMaxNum = 20;
@@ -154,6 +162,12 @@ unsigned int __stdcall ProxyThread(LPVOID lpParameter)
     int recvSize;
     int ret;
 
+    boolean ifHave = false;  // 本地是否有缓存文件
+    boolean ifMake = true;   // 是否需要新建或更新缓存文件
+    FILE* fileIn;   // 文件输入指针
+    char cachename[105];
+    char date[50];
+
     // 接受客户端发送的数据
     recvSize = recv(((ProxyParam*)lpParameter)->clientSocket, Buffer, MAXSIZE, 0); // 5. 从客户端接收数据
     HttpHeader *httpHeader = new HttpHeader(); // 移动至if之前，否则会报错
@@ -171,6 +185,18 @@ unsigned int __stdcall ProxyThread(LPVOID lpParameter)
     
     // 解析HTTP头部信息
     ParseHttpHead(CacheBuffer, httpHeader);
+    // 确认是否存在缓存
+    makeCachename(httpHeader->url, cachename); // http://jwts.hit.edu.cn/queryDlfs -> httpjwtshiteducnqueryDlfs.txt
+    if(fopen_s(&fileIn, (cacheDir+cachename).c_str(), "r")==0)
+    {
+        printf("存在缓存\n");
+        getCachedate(fileIn, date); // 获取缓存日期
+        fclose(fileIn);
+        addDate(Buffer, date); // 在HTTP请求头前添加缓存日期
+        ifHave = true;
+    }
+    else printf("需要新建本地缓存\n"); 
+    
     delete CacheBuffer;
 
     // 将请求转发到目标服务器
@@ -182,14 +208,16 @@ unsigned int __stdcall ProxyThread(LPVOID lpParameter)
     // 将客户端发送的 HTTP 数据报文直接转发给目标服务器
     ret = send(((ProxyParam *)lpParameter)->serverSocket, Buffer, strlen(Buffer) + 1, 0);   // 8. 向目标服务器发送报文
     // 等待目标服务器返回数据
-    recvSize = recv(((ProxyParam*)lpParameter)->serverSocket,Buffer, MAXSIZE, 0); // 9. 接收目标服务器返回数据
+    recvSize = recv(((ProxyParam*)lpParameter)->serverSocket, Buffer, MAXSIZE, 0); // 9. 接收目标服务器返回数据
     if (recvSize <= 0)
     {
         goto error;
     }
+    if(ifHave) ifMake = useCache(Buffer, cachename); // TODO 内部判断是否使用缓存文件
+    if(ifMake) makeCache(Buffer, httpHeader->url); // TODO 新建或更新缓存文件
+    
     // 将目标服务器返回的数据直接转发给客户端
-    ret = send(((ProxyParam*)lpParameter)->clientSocket,Buffer, sizeof(Buffer), 0); // 10. 将目标服务器数据发送回客户端
-
+    ret = send(((ProxyParam*)lpParameter)->clientSocket, Buffer, sizeof(Buffer), 0); // 10. 将目标服务器数据发送回客户端
 // 错误处理
 error:
     printf("关闭套接字\n");
@@ -231,7 +259,7 @@ void ParseHttpHead(char *buffer, HttpHeader *httpHeader)
         memcpy(httpHeader->method, "POST", 4);
         memcpy(httpHeader->url, &p[5], strlen(p) - 14); // 从请求行中提取URL
     }
-    printf("%s\n", httpHeader->url);
+    // printf("%s\n", httpHeader->url);
     
     // 循环提取后续部分，包括主机名HOST、Cookie
     p = strtok_s(NULL, delim, &ptr);
@@ -300,4 +328,120 @@ BOOL ConnectToServer(SOCKET *serverSocket, char *host)
         return FALSE;
     }
     return TRUE;
+}
+
+/*以下为缓存功能使用的函数*/
+/*构造缓存文件名*/
+void makeCachename(char* url, char* cachename)
+{
+	int count = 0;
+	while (*url != '\0') {
+		if ((*url >= 'a' && *url <= 'z') || (*url >= 'A' && *url <= 'Z') || (*url >= '0' && *url <= '9')) 
+        {
+			*cachename++ = *url;
+			count++;
+		}
+		if(count >= 100) break;
+		url++;
+	}
+	strcat(cachename, ".txt");
+}
+
+/*获取缓存文件中的日期*/
+void getCachedate(FILE* in, char* date)
+{
+    // 逐行寻找，直到包含 "Date" 字段的行
+    char target[5] = "Date";
+    char *p, *ptr;
+    char buffer[MAXSIZE];
+    ZeroMemory(buffer, MAXSIZE);
+    fread(buffer, sizeof(char), MAXSIZE, in);
+    const char* delim = "\r\n"; //换行符
+    p = strtok_s(buffer, delim, &ptr);  // 提取一行
+    int len = strlen(target) + 2;   // 只需要“Date: ”后的
+    while (p)
+    {
+        if(strstr(p, target) != NULL)   // 是否有匹配的
+        {
+            memcpy(date, &p[len], strlen(p) - len);
+            return;
+        }
+        p = strtok_s(NULL, delim, &ptr);
+    }
+}
+
+/*为HTTP请求报文添加字段*/
+void addDate(char* buffer, char* date)
+{
+    const char* field = "Host";
+    const char* newfield = "If-Modified-Since: ";  // 定义将要插入的新字段 "If-Modified-Since:"
+    //const char *delim = "\r\n";
+
+    char temp[MAXSIZE];  // 临时数组，用于存储原始数据的副本
+    ZeroMemory(temp, MAXSIZE);
+
+    char* pos = strstr(buffer, field);  // 找到"Host"字段的位置
+    
+    for(int i = 0; i < strlen(pos); i++) temp[i] = pos[i];  // 备份
+    *pos = '\0';  // 在"Host"的位置插入字符串结束符，截断原始buffer
+
+    while(*newfield != '\0') *pos++ = *newfield++;      // 插入"If-Modified-Since: "
+
+    while(*date != '\0') *pos++ = *date++;  // 插入日期
+    *pos++ = '\r';  // 在日期后添加回车符
+    *pos++ = '\n';  // 添加换行符
+
+    for(int i = 0; i < strlen(temp); i++)  *pos++ = temp[i];  // 将temp中的数据复制回buffer
+}
+
+/*判断是否使用本地的缓存文件*/
+boolean useCache(char* buffer, char* cachename)
+{
+    char *p, *ptr, tempBuffer[MAXSIZE + 1];
+    ZeroMemory(tempBuffer, MAXSIZE + 1);
+    const char* delim = "\r\n";  // 分隔符
+    memcpy(tempBuffer, buffer, strlen(buffer));
+    
+    p = strtok_s(tempBuffer, delim, &ptr);  // 找到并返回第一行，通常是状态行
+
+    // 主机返回的报文中的状态码为304时返回已缓存的内容
+    if (strstr(p, "304") != NULL)  // 检查是否包含"304"状态码
+    { 
+        printf("使用本地缓存\n"); 
+        ZeroMemory(buffer, strlen(buffer));  // 清空原始buffer
+        FILE* in = NULL; 
+        if (fopen_s(&in, (cacheDir+cachename).c_str(), "r") == 0) 
+        { 
+            fread(buffer, sizeof(char), MAXSIZE, in);  // 从缓存中读取数据到buffer
+            fclose(in);
+        }
+        return false;  // 返回false，不需要更新缓存
+    }
+    printf("需要更新本地缓存\n"); 
+    return true;    // 需要更新缓存
+
+}
+
+/*新建或更新缓存文件*/
+void makeCache(char* buffer, char* url)
+{
+    char* p, * ptr, tempBuffer[MAXSIZE + 1];
+    ZeroMemory(tempBuffer, MAXSIZE + 1);
+    const char* delim = "\r\n";
+    memcpy(tempBuffer, buffer, strlen(buffer));
+
+    p = strtok_s(tempBuffer, delim, &ptr);  // 获取HTTP响应的第一行，包含状态码
+
+    if (strstr(tempBuffer, "200") != NULL) // 检查第一行中是否包含状态码"200"
+    {
+        char cachename[105] = { 0 };
+        makeCachename(url, cachename);
+
+        FILE* out;
+        fopen_s(&out, (cacheDir+cachename).c_str(), "w+");  // 使用fopen_s打开或创建文件，如果文件存在则清空
+        fwrite(buffer, sizeof(char), strlen(buffer), out);  // 将buffer写入文件
+        fclose(out);
+
+        printf("新建或更新本地缓存成功，缓存名：%s\n", cachename);  // 打印缓存成功的消息
+    }
 }
