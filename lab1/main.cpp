@@ -30,7 +30,7 @@ unsigned int __stdcall ProxyThread(LPVOID lpParameter);
 /*代理服务器全局变量*/
 SOCKET ProxyServer; // 代理套接字描述符：用于接收来自客户端的连接
 sockaddr_in ProxyServerAddr;    // 代理端点地址
-const int ProxyPort = 10240;    // 代理端口
+const int ProxyPort = 8080;    // 代理端口
 // 由于新的连接都使用新线程进行处理，对线程的频繁的创建和销毁特别浪费资源
 // 可以使用线程池技术提高服务器效率
 // const int ProxyThreadMaxNum = 20;
@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) //  _tmain改为main，_TCHAR改为char
 {
     printf("代理服务器正在启动\n");
     printf("初始化...\n");
-    if (!InitSocket())
+    if (!InitSocket()) 
     {
         printf("socket 初始化失败\n");
         return -1;
@@ -60,15 +60,15 @@ int main(int argc, char *argv[]) //  _tmain改为main，_TCHAR改为char
     // 代理服务器不断监听
     while (true)
     {
-        acceptSocket = accept(ProxyServer, NULL, NULL);
+        acceptSocket = accept(ProxyServer, NULL, NULL); // 4. 阻塞函数accept对每个到来的连接请求建立连接
         lpProxyParam = new ProxyParam;
         if (lpProxyParam == NULL)
         {
             continue;
         }
         lpProxyParam->clientSocket = acceptSocket;
-        hThread = (HANDLE)_beginthreadex(NULL, 0,&ProxyThread, (LPVOID)lpProxyParam, 0, 0);
-        CloseHandle(hThread);
+        hThread = (HANDLE)_beginthreadex(NULL, 0,&ProxyThread, (LPVOID)lpProxyParam, 0, 0); // 创建新线程，执行ProxyThread函数
+        CloseHandle(hThread);   // 关闭线程句柄，但子线程仍在运行
         Sleep(200);
     }
     closesocket(ProxyServer);
@@ -110,7 +110,7 @@ BOOL InitSocket()
         return FALSE;
     }
     
-    ProxyServer = socket(AF_INET, SOCK_STREAM, 0);  // 创建套接字，返回描述符。使用TCP协议（用于监听来自客户端的连接）
+    ProxyServer = socket(AF_INET, SOCK_STREAM, 0);  // 1. 创建套接字，返回描述符。使用TCP协议（用于监听来自客户端的连接请求）
     
     if (INVALID_SOCKET == ProxyServer)
     {
@@ -122,13 +122,13 @@ BOOL InitSocket()
     ProxyServerAddr.sin_port = htons(ProxyPort);
     ProxyServerAddr.sin_addr.S_un.S_addr = INADDR_ANY;
     
-    if (bind(ProxyServer, (SOCKADDR *)&ProxyServerAddr, sizeof(SOCKADDR)) == SOCKET_ERROR)  // 绑定套接字的本地端点地址，IP为所有可用IP，端口为ProxyPort
+    if (bind(ProxyServer, (SOCKADDR *)&ProxyServerAddr, sizeof(SOCKADDR)) == SOCKET_ERROR)  // 2. 绑定套接字的本地端点地址，IP为所有可用IP，端口为ProxyPort
     {
         printf("绑定套接字失败\n");
         return FALSE;
     }
     
-    if (listen(ProxyServer, SOMAXCONN) == SOCKET_ERROR)
+    if (listen(ProxyServer, SOMAXCONN) == SOCKET_ERROR) // 3. 套接字进入监听模式，等待客户端发送连接请求
     {
         printf("监听端口%d 失败", ProxyPort);
         return FALSE;
@@ -155,7 +155,7 @@ unsigned int __stdcall ProxyThread(LPVOID lpParameter)
     int ret;
 
     // 接受客户端发送的数据
-    recvSize = recv(((ProxyParam*)lpParameter)->clientSocket,Buffer, MAXSIZE, 0);
+    recvSize = recv(((ProxyParam*)lpParameter)->clientSocket, Buffer, MAXSIZE, 0); // 5. 从客户端接收数据
     HttpHeader *httpHeader = new HttpHeader(); // 移动至if之前，否则会报错
     
     // 接受失败或连接被关闭则报错
@@ -167,32 +167,33 @@ unsigned int __stdcall ProxyThread(LPVOID lpParameter)
     // 动态分配缓存空间，并复制接受到的数据
     CacheBuffer = new char[recvSize + 1];
     ZeroMemory(CacheBuffer, recvSize + 1);
-    memcpy(CacheBuffer, Buffer, recvSize);
+    memcpy(CacheBuffer, Buffer, recvSize);  // 将数据从Buffer复制到CacheBuffer中
     
     // 解析HTTP头部信息
     ParseHttpHead(CacheBuffer, httpHeader);
     delete CacheBuffer;
 
     // 将请求转发到目标服务器
-    if (!ConnectToServer(&((ProxyParam*)lpParameter)->serverSocket,httpHeader->host))
+    if (!ConnectToServer(&((ProxyParam*)lpParameter)->serverSocket,httpHeader->host)) // 6. 创建与目标服务器连接的套接字    7. 与目标服务器连接
     {
         goto error;
     }
     printf("代理连接主机 %s 成功\n", httpHeader->host);
     // 将客户端发送的 HTTP 数据报文直接转发给目标服务器
-    ret = send(((ProxyParam *)lpParameter)->serverSocket, Buffer, strlen(Buffer) + 1, 0);
+    ret = send(((ProxyParam *)lpParameter)->serverSocket, Buffer, strlen(Buffer) + 1, 0);   // 8. 向目标服务器发送报文
     // 等待目标服务器返回数据
-    recvSize = recv(((ProxyParam*)lpParameter)->serverSocket,Buffer, MAXSIZE, 0);
+    recvSize = recv(((ProxyParam*)lpParameter)->serverSocket,Buffer, MAXSIZE, 0); // 9. 接收目标服务器返回数据
     if (recvSize <= 0)
     {
         goto error;
     }
     // 将目标服务器返回的数据直接转发给客户端
-    ret = send(((ProxyParam*)lpParameter)->clientSocket,Buffer, sizeof(Buffer), 0);
+    ret = send(((ProxyParam*)lpParameter)->clientSocket,Buffer, sizeof(Buffer), 0); // 10. 将目标服务器数据发送回客户端
 
 // 错误处理
 error:
     printf("关闭套接字\n");
+    printf("************************************************\n");
     Sleep(200);
     closesocket(((ProxyParam *)lpParameter)->clientSocket);
     closesocket(((ProxyParam *)lpParameter)->serverSocket);
@@ -274,18 +275,25 @@ BOOL ConnectToServer(SOCKET *serverSocket, char *host)
     sockaddr_in serverAddr;
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(HTTP_PORT);
+    
+    // 将主机名（域名）解析为IP地址
     HOSTENT *hostent = gethostbyname(host);
     if (!hostent)
     {
         return FALSE;
     }
+
     in_addr Inaddr = *((in_addr *)*hostent->h_addr_list);
     serverAddr.sin_addr.s_addr = inet_addr(inet_ntoa(Inaddr));
+    
+    // 创建新的套接字，用于与目标服务器连接
     *serverSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (*serverSocket == INVALID_SOCKET)
     {
         return FALSE;
     }
+
+    // 连接到目标服务器
     if (connect(*serverSocket, (SOCKADDR *)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR)
     {
         closesocket(*serverSocket);
