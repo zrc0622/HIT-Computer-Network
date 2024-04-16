@@ -9,10 +9,11 @@
 #pragma comment(lib, "Ws2_32.lib")
 #define MAXSIZE 65507 // 发送数据报文的最大长度
 #define HTTP_PORT 80  // http 服务器端口
-#define banedWeb "http://jwts.hit.edu.cn/"  // 不允许访问的网站
+#define banedWeb "http://today.hit.edu.cn/"  // 不允许访问的网站（今日哈工大）
 #define fishWebSrc "http://www.hit.edu.cn/" // 钓鱼源网站
-#define fishWebTarget "https://future.hit.edu.cn/"  // 钓鱼目的网站
+#define fishWebTarget "https://future.hit.edu.cn/"  // 钓鱼目的网站：哈工大主页->未来技术主页
 #define fishWebHost "future.hit.edu.cn" // 钓鱼目的网站的主机名
+#define banedIP "127.0.0.1" // 不允许接入的用户IP（本机）
 
 /*HTTP头部结构定义*/
 struct HttpHeader
@@ -43,6 +44,7 @@ SOCKET ProxyServer; // 代理套接字描述符：用于接收来自客户端的
 sockaddr_in ProxyServerAddr;    // 代理端点地址
 const int ProxyPort = 8080;    // 代理端口
 std::string cacheDir = "./cache/";  // cache文件夹路径
+int ifBanUser = false;
 // 由于新的连接都使用新线程进行处理，对线程的频繁的创建和销毁特别浪费资源
 // 可以使用线程池技术提高服务器效率
 // const int ProxyThreadMaxNum = 20;
@@ -65,19 +67,30 @@ int main(int argc, char *argv[]) //  _tmain改为main，_TCHAR改为char
         return -1;
     }
     printf("代理服务器正在运行，监听端口 %d\n", ProxyPort);
+    printf("是否禁止用户 %s 访问外部网站，输入1禁止，输入0允许：", banedIP);
+    scanf("%d", &ifBanUser);
     SOCKET acceptSocket = INVALID_SOCKET;
     ProxyParam *lpProxyParam;
     HANDLE hThread;
     DWORD dwThreadID;
+    sockaddr_in acceptAdd;  // 用于保存客户端信息
+    int addLen = sizeof(acceptAdd);
     // 代理服务器不断监听
     while (true)
     {
-        acceptSocket = accept(ProxyServer, NULL, NULL); // 4. 阻塞函数accept对每个到来的连接请求建立连接
+        acceptSocket = accept(ProxyServer, (SOCKADDR*)&acceptAdd, &addLen); // 4. 阻塞函数accept对每个到来的连接请求建立连接
         lpProxyParam = new ProxyParam;
         if (lpProxyParam == NULL)
         {
             continue;
         }
+        // 实现不允许部分用户连接
+        if(strcmp(inet_ntoa(acceptAdd.sin_addr), banedIP)==0 && ifBanUser==1)
+        {
+            printf("用户 %s 禁止访问\n", banedIP);
+            continue;
+        }
+        printf("用户 %s 已连接\n", inet_ntoa(acceptAdd.sin_addr));
         lpProxyParam->clientSocket = acceptSocket;
         hThread = (HANDLE)_beginthreadex(NULL, 0,&ProxyThread, (LPVOID)lpProxyParam, 0, 0); // 创建新线程，执行ProxyThread函数
         CloseHandle(hThread);   // 关闭线程句柄，但子线程仍在运行
@@ -385,7 +398,7 @@ void getCachedate(FILE* in, char* date)
 void addDate(char* buffer, char* date)
 {
     const char* field = "Host";
-    const char* newfield = "If-Modified-Since: ";  // 定义将要插入的新字段 "If-Modified-Since:"
+    const char* newfield = "if-modified-since: ";  // 定义将要插入的新字段 "if-modified-since:"
     //const char *delim = "\r\n";
 
     char temp[MAXSIZE];  // 临时数组，用于存储原始数据的副本
@@ -396,7 +409,7 @@ void addDate(char* buffer, char* date)
     for(int i = 0; i < strlen(pos); i++) temp[i] = pos[i];  // 备份
     *pos = '\0';  // 在"Host"的位置插入字符串结束符，截断原始buffer
 
-    while(*newfield != '\0') *pos++ = *newfield++;      // 插入"If-Modified-Since: "
+    while(*newfield != '\0') *pos++ = *newfield++;      // 插入"if-modified-since: "
 
     while(*date != '\0') *pos++ = *date++;  // 插入日期
     *pos++ = '\r';  // 在日期后添加回车符
