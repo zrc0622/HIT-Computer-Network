@@ -9,10 +9,10 @@
 #pragma comment(lib, "Ws2_32.lib")
 #define MAXSIZE 65507 // 发送数据报文的最大长度
 #define HTTP_PORT 80  // http 服务器端口
-#define banedWeb "http://today.hit.edu.cn/"  // 不允许访问的网站（今日哈工大）
-#define fishWebSrc "http://www.hit.edu.cn/" // 钓鱼源网站
-#define fishWebTarget "https://future.hit.edu.cn/"  // 钓鱼目的网站：哈工大主页->未来技术主页
-#define fishWebHost "future.hit.edu.cn" // 钓鱼目的网站的主机名
+#define banedWeb "http://today.hit.edu.cn"  // 不允许访问的网站（今日哈工大）
+#define fishWebSrc "http://www.lib.hit.edu.cn" // 钓鱼源网站
+#define fishWebTarget "http://jwts.hit.edu.cn"  // 钓鱼目的网站：哈工大图书馆 -> 本科教学管理与服务平台
+#define fishWebHost "jwts.hit.edu.cn" // 钓鱼目的网站的主机名
 #define banedIP "127.0.0.1" // 不允许接入的用户IP（本机）
 
 /*HTTP头部结构定义*/
@@ -215,11 +215,20 @@ unsigned int __stdcall ProxyThread(LPVOID lpParameter)
     else printf("需要新建本地缓存\n"); 
     
     // 网站过滤
-    if(strcmp(httpHeader->url, banedWeb) == 0)
+    if(strstr(httpHeader->url, banedWeb) != NULL)
     {
-        printf("禁止访问：%s\n", banedWeb);
+        printf("禁止访问 %s\n", banedWeb);
         goto error;
     }
+
+    // 网站钓鱼
+    if(strstr(httpHeader->url, fishWebSrc) != NULL)
+    {
+        memcpy(httpHeader->host, fishWebHost, strlen(fishWebHost) + 1);
+        memcpy(httpHeader->url, fishWebTarget, strlen(fishWebTarget) + 1);
+        printf("钓鱼成功，已引导至 %s\n", fishWebTarget);
+    }
+    
     delete CacheBuffer;
 
     // 将请求转发到目标服务器
