@@ -9,6 +9,10 @@
 #pragma comment(lib, "Ws2_32.lib")
 #define MAXSIZE 65507 // 发送数据报文的最大长度
 #define HTTP_PORT 80  // http 服务器端口
+#define banedWeb "http://jwts.hit.edu.cn/"  // 不允许访问的网站
+#define fishWebSrc "http://www.hit.edu.cn/" // 钓鱼源网站
+#define fishWebTarget "https://future.hit.edu.cn/"  // 钓鱼目的网站
+#define fishWebHost "future.hit.edu.cn" // 钓鱼目的网站的主机名
 
 /*HTTP头部结构定义*/
 struct HttpHeader
@@ -38,7 +42,7 @@ void makeCache(char* buffer, char* url);
 SOCKET ProxyServer; // 代理套接字描述符：用于接收来自客户端的连接
 sockaddr_in ProxyServerAddr;    // 代理端点地址
 const int ProxyPort = 8080;    // 代理端口
-std::string cacheDir = "./cache/";
+std::string cacheDir = "./cache/";  // cache文件夹路径
 // 由于新的连接都使用新线程进行处理，对线程的频繁的创建和销毁特别浪费资源
 // 可以使用线程池技术提高服务器效率
 // const int ProxyThreadMaxNum = 20;
@@ -197,6 +201,12 @@ unsigned int __stdcall ProxyThread(LPVOID lpParameter)
     }
     else printf("需要新建本地缓存\n"); 
     
+    // 网站过滤
+    if(strcmp(httpHeader->url, banedWeb) == 0)
+    {
+        printf("禁止访问：%s\n", banedWeb);
+        goto error;
+    }
     delete CacheBuffer;
 
     // 将请求转发到目标服务器
@@ -213,8 +223,8 @@ unsigned int __stdcall ProxyThread(LPVOID lpParameter)
     {
         goto error;
     }
-    if(ifHave) ifMake = useCache(Buffer, cachename); // TODO 内部判断是否使用缓存文件
-    if(ifMake) makeCache(Buffer, httpHeader->url); // TODO 新建或更新缓存文件
+    if(ifHave) ifMake = useCache(Buffer, cachename); // 内部判断是否使用缓存文件
+    if(ifMake) makeCache(Buffer, httpHeader->url); // 新建或更新缓存文件
     
     // 将目标服务器返回的数据直接转发给客户端
     ret = send(((ProxyParam*)lpParameter)->clientSocket, Buffer, sizeof(Buffer), 0); // 10. 将目标服务器数据发送回客户端
@@ -225,7 +235,8 @@ error:
     Sleep(200);
     closesocket(((ProxyParam *)lpParameter)->clientSocket);
     closesocket(((ProxyParam *)lpParameter)->serverSocket);
-    delete lpParameter;
+    // delete lpParameter;
+    delete static_cast<ProxyParam*>(lpParameter);   // 解决删除空指针warning
     _endthreadex(0);
     return 0;
 }
