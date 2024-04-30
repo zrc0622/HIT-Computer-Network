@@ -206,13 +206,13 @@ unsigned int __stdcall ProxyThread(LPVOID lpParameter)
     makeCachename(httpHeader->url, cachename); // http://jwts.hit.edu.cn/queryDlfs -> httpjwtshiteducnqueryDlfs.txt
     if(fopen_s(&fileIn, (cacheDir+cachename).c_str(), "r")==0)
     {
-        printf("存在缓存\n");
+        printf("缓存命中\n");   // 22
         getCachedate(fileIn, date); // 获取缓存日期
         fclose(fileIn);
         addDate(Buffer, date); // 在HTTP请求头前添加缓存日期
         ifHave = true;
     }
-    else printf("需要新建本地缓存\n"); 
+    else printf("缓存未命中，需要新建本地缓存\n");  // 11
     
     // 网站过滤
     if(strstr(httpHeader->url, banedWeb) != NULL)
@@ -440,7 +440,7 @@ boolean useCache(char* buffer, char* cachename)
     // 主机返回的报文中的状态码为304时返回已缓存的内容
     if (strstr(p, "304") != NULL)  // 检查是否包含"304"状态码
     { 
-        printf("使用本地缓存\n"); 
+        printf("使用本地缓存，缓存名：%s\n", cachename);    // 44
         ZeroMemory(buffer, strlen(buffer));  // 清空原始buffer
         FILE* in = NULL; 
         if (fopen_s(&in, (cacheDir+cachename).c_str(), "r") == 0) 
@@ -450,7 +450,7 @@ boolean useCache(char* buffer, char* cachename)
         }
         return false;  // 返回false，不需要更新缓存
     }
-    printf("需要更新本地缓存\n"); 
+    printf("需要更新本地缓存\n");   // 33
     return true;    // 需要更新缓存
 
 }
