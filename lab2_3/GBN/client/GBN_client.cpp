@@ -101,8 +101,10 @@ BOOL lossInLossRatio(float lossRatio) {
 	}
 	return FALSE;
 }
+
 struct ProxyParam {
 };
+
 //主函数
 int main(int argc, char* argv[])
 {

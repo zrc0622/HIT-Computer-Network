@@ -16,7 +16,7 @@
 #define SERVER_IP "0.0.0.0" //IP 地址
 #define CLIENT_IP "127.0.0.1" //客户端IP
 const int BUFFER_LENGTH = 1026;//缓冲区大小，（以太网中 UDP 的数据帧中包长度应小于 1480 字节）
-const int SEND_WIND_SIZE = 5;//发送窗口大小为 10，GBN 中应满足 W + 1 <= N（W 为发送窗口大小，N 为序列号个数）
+const int SEND_WIND_SIZE = 1;//发送窗口大小为 10，GBN 中应满足 W + 1 <= N（W 为发送窗口大小，N 为序列号个数）
 //本例取序列号 0...19 共 20 个
 //如果将窗口大小设为 1，则为停-等协议
 const int SEQ_SIZE = 20; //序列号的个数，从 0~19 共计 20 个

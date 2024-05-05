@@ -6,29 +6,30 @@
 #include <fstream>
 #include <process.h>
 #include <iostream>
-#include <ws2tcpip.h>
-#include <string.h>
+#include <cstdlib>
 
+// using namespace std;
 #pragma comment(lib,"ws2_32.lib")
 #pragma warning(disable : 4996)
-#define SERVER_PORT 12340 //端口号
-#define CLIENT_PORT 12341 //端口号
-#define SERVER_IP "0.0.0.0" //IP 地址
+#define SERVER_PORT 12341 //端口号
+#define CLIENT_PORT 12340 //端口号
+#define SERVER_IP "127.0.0.1" //IP 地址
 #define CLIENT_IP "127.0.0.1" //客户端IP
 const int BUFFER_LENGTH = 1026;//缓冲区大小，（以太网中 UDP 的数据帧中包长度应小于 1480 字节）
-const int SEND_WIND_SIZE = 5;//发送窗口大小为 10，GBN 中应满足 W + 1 <= N（W 为发送窗口大小，N 为序列号个数）
+const int SEND_WIND_SIZE = 1;//发送窗口大小为 5，GBN 中应满足 W + 1 <= N（W 为发送窗口大小，N 为序列号个数）
 //本例取序列号 0...19 共 20 个
 //如果将窗口大小设为 1，则为停-等协议
 const int SEQ_SIZE = 20; //序列号的个数，从 0~19 共计 20 个
 //由于发送数据第一个字节如果值为 0，则数据会发送失败
 //因此接收端序列号为 1~20，与发送端一一对应
 unsigned int __stdcall ProxyThread(LPVOID lpParameter);
-/*---------------------------------------------------发送端相关参数及函数------------------------------------------------------*/
+
 BOOL ack[SEQ_SIZE];//收到 ack 情况，对应 0~19 的 ack
 int curSeq;//当前数据包的 seq
 int curAck;//当前等待确认的 ack
 int totalSeq;//收到的包的总数
 int totalPacket;//需要发送的包总数
+int a = 0;
 
 void getCurTime(char* ptime) {
 	SYSTEMTIME sys;
@@ -44,6 +45,7 @@ bool seqIsAvailable() {
 	return step < SEND_WIND_SIZE ? ack[curSeq] : false;
 }
 
+
 void timeoutHandler() {	// modify
 	printf("Timer out error.\n");
 	int index;
@@ -58,6 +60,7 @@ void timeoutHandler() {	// modify
 		totalSeq = totalSeq - (SEQ_SIZE - curAck + curSeq);
 	curSeq = curAck;
 }
+
 
 void ackHandler(char c) {
 	unsigned char index = (unsigned char)c - 1; //序列号减一
@@ -90,7 +93,6 @@ void printTips()
 	printf("************************************************\n");
 }
 
-
 BOOL lossInLossRatio(float lossRatio) {
 	int lossBound = (int)(lossRatio * 100);
 	int r = rand() % 101;
@@ -106,7 +108,6 @@ struct ProxyParam {
 //主函数
 int main(int argc, char* argv[])
 {
-	//加载套接字库（必须）
 	WORD wVersionRequested;
 	WSADATA wsaData;
 	//套接字加载时错误提示
@@ -128,6 +129,7 @@ int main(int argc, char* argv[])
 	else {
 		printf("The Winsock 2.2 dll was found okay\n");
 	}
+
 	SOCKET sockServer = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 	//设置套接字为非阻塞模式
 	int iMode = 1; //1：非阻塞，0：阻塞
@@ -144,14 +146,13 @@ int main(int argc, char* argv[])
 		WSACleanup();
 		return -1;
 	}
-
 	SOCKADDR_IN addrClient; //客户端地址
 	int length = sizeof(SOCKADDR);
 	char buffer[BUFFER_LENGTH]; //数据发送接收缓冲区
 	ZeroMemory(buffer, sizeof(buffer));
-	std::ifstream icin;
 	//将测试数据读入内存
-	icin.open("server_output.txt");
+	std::ifstream icin;
+	icin.open("client_output.txt");
 	char data[1024 * 113];
 	ZeroMemory(data, sizeof(data));
 	icin.read(data, 1024 * 113);
@@ -160,8 +161,6 @@ int main(int argc, char* argv[])
 	printf("File size is %dB, each packet is 1024B and packet total num is % d\n", strlen(data), totalPacket);
 	int recvSize;
 	memset(ack, true, sizeof(ack));
-
-	// printf("data:%s\n", data);
 	//创建子线程负责传输分组
 	ProxyParam* lpProxyParam = new ProxyParam;
 	HANDLE hThread = (HANDLE)_beginthreadex(NULL, 0, &ProxyThread, (LPVOID)lpProxyParam, 0, 0);
@@ -183,12 +182,12 @@ int main(int argc, char* argv[])
 		else if (strcmp(buffer, "-testgbn") == 0) {
 			//进入 gbn 测试阶段
 			//首先 server（server 处于 0 状态）向 client 发送 205 状态码（server进入 1 状态）
-			//server 等待 client 回复 200 状态码，如果收到（server 进入 2 状态），则开始传输文件，否则延时等待直至超时
+			//server 等待 client 回复 200 状态码，如果收到（server 进入 2 状态），则开始传输文件，否则延时等待直至超时\
 			//在文件传输阶段，server 发送窗口大小设为
 			ZeroMemory(buffer, sizeof(buffer));
 			int recvSize;
 			int waitCount = 0;
-			printf("Begin to test GBN protocol,please don't abort the process\n");
+			printf("Bgain to test GBN protocol,please don't abort the process\n");
 			//加入了一个握手阶段
 			//首先服务器向客户端发送一个 205 大小的状态码表示服务器准备好了，可以发送数据
 			//客户端收到 205 之后回复一个 200 大小的状态码，表示客户端准备好了，可以接收数据了
@@ -234,14 +233,7 @@ int main(int argc, char* argv[])
 					if (seqIsAvailable() && totalSeq < totalPacket) {
 						buffer[0] = curSeq + 1;
 						ack[curSeq] = FALSE;
-						//if (totalSeq == totalPacket - 1)
-						//{
-							//printf("debug:%d\n", strlen(data) - 1024 * totalSeq);
-							//memcpy(&buffer[1], data + 1024 * totalSeq, strlen(data) - 1024 * totalSeq);
-						//}
-						//else
 						memcpy(&buffer[1], data + 1024 * totalSeq, 1024);
-						// printf("buffer=%s\n", &buffer[1]);
 						printf("send a packet with a seq of %d\n", curSeq + 1);
 						sendto(sockServer, buffer, strlen(buffer) + 1, 0, (SOCKADDR*)&addrClient, sizeof(SOCKADDR));
 						++curSeq;
@@ -301,14 +293,7 @@ int main(int argc, char* argv[])
 	return 0;
 }
 
-//************************************
-// Method: ProxyThread
-// FullName: ProxyThread
-// Access: public 
-// Returns: unsigned int __stdcall
-// Qualifier: 线程执行函数
-// Parameter: LPVOID lpParameter
-//************************************
+
 unsigned int __stdcall ProxyThread(LPVOID lpParameter) {
 	//加载套接字库（必须）
 	WORD wVersionRequested;
@@ -341,9 +326,7 @@ unsigned int __stdcall ProxyThread(LPVOID lpParameter) {
 	char buffer[BUFFER_LENGTH];
 	ZeroMemory(buffer, sizeof(buffer));
 	int len = sizeof(SOCKADDR);
-	//为了测试与服务器的连接，可以使用 -time 命令从服务器端获得当前时间
-	//使用 -testgbn [X] [Y] 测试 GBN 其中[X]表示数据包丢失概率
-	// [Y]表示 ACK 丢包概率
+
 	printTips();
 	int ret;//受到数据大小
 	int interval = 1;//收到数据包之后返回 ack 的间隔，默认为 1 表示每个都返回 ack，0 或者负数均表示所有的都不返回 ack
@@ -359,9 +342,9 @@ unsigned int __stdcall ProxyThread(LPVOID lpParameter) {
 		ret = sscanf_s(buffer, "%s%f%f", &cmd, sizeof(cmd), &packetLossRatio, &ackLossRatio);
 		//开始 GBN 测试，使用 GBN 协议实现 UDP 可靠文件传输
 		if (!strcmp(cmd, "-testgbn")) {
-			out.open("server_input.txt");
+			out.open("client_input.txt");
 			printf("%s\n", "Begin to test GBN protocol, please don't abort the process");
-			printf("The loss ratio of packet is %.2f, the loss ratio of ack is %.2f\n", packetLossRatio, ackLossRatio);
+			printf("The loss ratio of packet is %.2f,the loss ratio of ack is % .2f\n", packetLossRatio, ackLossRatio);
 			int waitCount = 0;
 			int stage = 0;
 			BOOL b;
@@ -371,6 +354,7 @@ unsigned int __stdcall ProxyThread(LPVOID lpParameter) {
 			sendto(socketClient, "-testgbn", strlen("-testgbn") + 1, 0, (SOCKADDR*)&recvClient, sizeof(SOCKADDR));
 			while (true)
 			{
+				memset(buffer, 0, sizeof(buffer));
 				//等待 server 回复设置 UDP 为阻塞模式
 				recvfrom(socketClient, buffer, BUFFER_LENGTH, 0, (SOCKADDR*)&recvClient, &len);
 				if ((unsigned char)buffer[0] == 204) {
@@ -409,11 +393,10 @@ unsigned int __stdcall ProxyThread(LPVOID lpParameter) {
 						if (waitSeq == 21) {
 							waitSeq = 1;
 						}
+						//输出数据
 						// printf("buffer=%s\n", &buffer[1]);
 						buffer[0] = seq;
 						recvSeq = seq;
-						// 把 buffer[1] 存在buffer_1中
-						// 把 buffer_1 写入文件
 						if (out.is_open()) {
 							try {
 								out.write(&buffer[1], strlen(&buffer[1]));
