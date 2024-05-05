@@ -331,8 +331,8 @@ unsigned int __stdcall ProxyThread(LPVOID lpParameter) {
 	int ret;//受到数据大小
 	int interval = 1;//收到数据包之后返回 ack 的间隔，默认为 1 表示每个都返回 ack，0 或者负数均表示所有的都不返回 ack
 	char cmd[128];
-	float packetLossRatio = 0.2f; //默认包丢失率 0.2
-	float ackLossRatio = 0.2f; //默认 ACK 丢失率 0.2
+	float packetLossRatio = 0.1f; //默认包丢失率 0.1
+	float ackLossRatio = 0.1f; //默认 ACK 丢失率 0.1
 	//用时间作为随机种子，放在循环的最外面
 	srand((unsigned)time(NULL));
 	std::ofstream out;
