@@ -86,7 +86,7 @@ void printTips()
 	printf("************************************************\n");
 	printf("|     -time to get current time                |\n");
 	printf("|     -quit to exit client                     |\n");
-	printf("|     -testgbn [X] [Y] to test the gbn         |\n");
+	printf("|     -testsw [X] [Y] to test the sw           |\n");
 	printf("************************************************\n");
 }
 
