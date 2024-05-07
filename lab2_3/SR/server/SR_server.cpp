@@ -454,8 +454,9 @@ unsigned int __stdcall ProxyThread(LPVOID lpParameter) {
 						// printf("cache %d len %d buffer len %d\n", seq, strlen(cache[seq]), strlen(&buffer[1]) + 1);
 						buffer[0] = seq;
 						buffer[1] = '\0';
+						// printf("seq %d receive, but not in order, Ack[seq] = %d\n", seq, Ack[seq]);
+						printf("seq %d receive, but not in order\n", seq);
 						Ack[seq] = 2;
-						printf("seq %d receive, but not in order, Ack[seq] = %d\n", seq, Ack[seq]);
 					}
 					else {
 						buffer[0] = seq;

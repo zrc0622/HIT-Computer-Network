@@ -38,7 +38,7 @@ void getCurTime(char* ptime) {
 	sprintf_s(ptime, 20, "%d-%d-%d %d:%d:%d", sys.wYear, sys.wMonth, sys.wDay, sys.wHour, sys.wMinute, sys.wSecond);
 }
 
-BOOL lossInLossRatio(float lossRatio) { // modify2
+BOOL lossInLossRatio(float lossRatio) { 
 	int lossBound = (int)(lossRatio * 100);
 	int r = rand() % 101;
 	if (r <= lossBound) {
@@ -99,7 +99,7 @@ void click() {
 	}
 }
 
-int checkTimeout() {
+int checkTimeout() { // modify2
 	for (int i = 0; i < SEQ_SIZE; i++) {
 		if (counter[i] >= 5) {
 			return i;
@@ -453,8 +453,9 @@ unsigned int __stdcall ProxyThread(LPVOID lpParameter)
 						// printf("cache %d len %d buffer len %d\n", seq, strlen(cache[seq]), strlen(&buffer[1]) + 1);
 						buffer[0] = seq;
 						buffer[1] = '\0';
+						// printf("seq %d receive, but not in order, Ack[seq] = %d\n", seq, Ack[seq]);
+						printf("seq %d receive, but not in order\n", seq);
 						Ack[seq] = 2;
-						printf("seq %d receive, but not in order, Ack[seq] = %d\n", seq, Ack[seq]);
 					}
 					else {
 						buffer[0] = seq;
